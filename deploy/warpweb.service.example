@@ -1,0 +1,21 @@
+# Reference only; INSTALL.sh generates paths for the current checkout/user.
+[Unit]
+Description=Warpweb local-agent web client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/YOUR_USER/Programming/warpweb
+EnvironmentFile=/home/YOUR_USER/.config/warpweb/warpweb.env
+ExecStart=/home/YOUR_USER/Programming/warpweb/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8797 --no-access-log --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

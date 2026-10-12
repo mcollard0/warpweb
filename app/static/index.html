@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#10131b">
+    <title>Warp sessions</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/preferences.js" defer></script>
+    <script src="/assets/app.js" defer></script>
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <div class="brand"><span class="brand-mark" aria-hidden="true">W</span><span>Warp <strong>sessions</strong></span></div>
+            <button class="icon-button hidden" id="options-toggle" type="button" aria-label="Options" aria-expanded="false" aria-controls="options-card" title="Options">⚙</button>
+            <button class="icon-button hidden" id="logout" type="button" aria-label="Log out" title="Log out">↪</button>
+        </header>
+        <section id="options-card" class="options-card hidden" aria-label="Options">
+            <h2>Options <small>Saved in this browser</small></h2>
+            <div class="options-grid">
+                <label>Recent directory limit<input id="option-mru" type="number" min="1" max="100" value="20"></label>
+                <label>History window (KiB)<input id="option-history" type="number" min="4" max="16" value="8"></label>
+                <label>Card preview (lines)<input id="option-lines" type="number" min="4" max="40" value="12"></label>
+                <label>Refresh cost every N prompts<input id="option-cost" type="number" min="1" max="100" value="1"></label>
+            </div>
+            <div class="options-actions"><button id="options-reset" type="button">Reset options</button><button id="mru-clear" type="button">Clear recent directories</button></div>
+            <p id="options-note" class="session-note"></p>
+        </section>
+        <datalist id="recent-directories"></datalist>
+        <section id="login-view" class="login-view hidden" aria-labelledby="login-title">
+            <span class="eyebrow">PRIVATE ACCESS</span>
+            <h1 id="login-title">Pick up where you left off.</h1>
+            <p>Your local Warp agent runs, in one place.</p>
+            <form id="login-form">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+                <button class="primary-button" type="submit">Unlock sessions <span aria-hidden="true">→</span></button>
+            </form>
+            <p class="notice" id="login-error" role="alert"></p>
+        </section>
+        <section id="chooser-view" class="hidden" aria-labelledby="chooser-title">
+            <div class="intro"><div><span class="eyebrow">YOUR WORKSPACE</span><h1 id="chooser-title">Sessions</h1></div><button class="icon-button" id="refresh" type="button" aria-label="Refresh sessions" title="Refresh">↻</button></div>
+            <div class="filters" role="group" aria-label="Run location">
+                <button type="button" class="filter active" data-scope="local" aria-pressed="true">Local agents</button>
+                <button type="button" class="filter" data-scope="all" aria-pressed="false">All runs</button>
+                <button type="button" class="filter" data-scope="cloud" aria-pressed="false">Cloud</button>
+            </div>
+            <p class="list-caption" id="list-caption">Choose an agent run to read its conversation.</p>
+            <div id="run-list" class="run-list" aria-live="polite"></div>
+            <button class="load-more hidden" id="load-more" type="button">Load older sessions ↓</button>
+        </section>
+        <section id="new-view" class="hidden new-view" aria-labelledby="new-title">
+            <button type="button" class="back-button" id="new-back">← &nbsp; All sessions</button>
+            <span class="eyebrow">LOCAL OZ CLI</span>
+            <h1 id="new-title">New session</h1>
+            <p>Starts a local agent process on this computer, not a cloud sandbox or a Warp desktop tab.</p>
+            <form id="new-form" class="task-form">
+                <label for="new-cwd">Working directory</label>
+                <input id="new-cwd" name="cwd" type="text" value="~" list="recent-directories" autocomplete="off" spellcheck="false" maxlength="1024" required>
+                <label for="new-prompt">First task</label>
+                <textarea id="new-prompt" name="prompt" rows="5" maxlength="4096" required placeholder="What should this local agent do?"></textarea>
+                <button class="primary-button" type="submit">Start local session <svg class="rocket" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4c3-2 6-2 6-2s0 3-2 6l-6 6-4-4 6-6Zm-6 6H4l-2 5 6-1m4 0v4l-5 2 1-6m-3 3-3 5 5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></button>
+            </form>
+            <p id="new-error" class="notice" role="alert"></p>
+        </section>
+        <section id="session-view" class="hidden session-view" aria-labelledby="session-title">
+            <div class="session-header">
+                <div><span id="session-source" class="eyebrow">AGENT RUN</span><h1 id="session-title">Loading session…</h1><p id="session-status">Fetching conversation…</p></div>
+                <button type="button" class="icon-button" id="minimize" aria-label="Minimize session; return to chooser" title="Minimize session">×</button>
+            </div>
+            <a id="shared-session" class="shared-session hidden" target="_blank" rel="noopener noreferrer">Open Warp shared session · steering requires edit access ↗</a>
+            <div id="history-scroll" class="history-scroll" role="log" aria-label="Agent conversation" tabindex="0"><div id="history-cards" class="history-cards"></div></div>
+            <form id="composer" class="composer hidden">
+                <label for="session-prompt">Continue local CLI conversation</label>
+                <div class="cwd-line"><label for="session-cwd">Working directory</label><input id="session-cwd" name="cwd" type="text" value="~" list="recent-directories" autocomplete="off" spellcheck="false" maxlength="1024" required></div>
+                <div class="compose-row"><textarea id="session-prompt" rows="2" maxlength="4096" placeholder="Message the local agent…" required></textarea><button id="send" class="send-button" type="submit" aria-label="Send to local CLI agent"><svg class="rocket" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4c3-2 6-2 6-2s0 3-2 6l-6 6-4-4 6-6Zm-6 6H4l-2 5 6-1m4 0v4l-5 2 1-6m-3 3-3 5 5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></button></div>
+            </form>
+            <p id="session-note" class="session-note">Viewing this run never stops it.</p>
+        </section>
+        <footer class="footer">Minimizing a session never stops the agent process.</footer>
+    </main>
+</body>
+</html>

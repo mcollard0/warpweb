@@ -1,0 +1,6 @@
+# Add only this ingress rule to your own tunnel config before its catch-all.
+# Do not replace unrelated ingress rules or publish tunnel credentials.
+ingress:
+  - hostname: agents.example.com
+    service: http://127.0.0.1:8797
+  - service: http_status:404
