@@ -1,3 +1,5 @@
+<img width="747" height="936" alt="warpweb-login" src="https://github.com/user-attachments/assets/d9920986-ef7f-45cb-bfb4-072354e09c04" />
+
 # Warp mobile client
 A password-gated, mobile-friendly web client for browsing Warp agent runs, reading conversation cards, and creating or continuing local Oz CLI sessions.
 
@@ -15,3 +17,8 @@ Start with **[INSTALL.md](INSTALL.md)** for the Personal-token setup, interactiv
 See [architecture.md](architecture.md) for API details and limitations. For development, install server dependencies with `.venv/bin/python -m pip install -r requirements.txt` and test dependencies with `.venv/bin/python -m pip install -r tests/requirements.txt`. Run `.venv/bin/python -m pytest -q tests`; mocked browser tests use Playwright and an installed `chromium` executable without contacting Warp or running agents.
 
 The October 12 UX changes are deployed: the approved service restart completed on October 12, 2026, at approximately 13:32 UTC, with no active warpweb CLI jobs detected beforehand. Public assets/session health, authentication protection on the new endpoints, HTTPS redirect, and security headers passed smoke checks. Log in again after refreshing the page; authenticated live interaction still requires your password. Compatibility fallbacks remain available for future rolling asset/backend updates.
+
+<img width="757" height="937" alt="warpweb-new-session" src="https://github.com/user-attachments/assets/c8337cc0-da9c-4494-a75a-4a455fb9864a" />
+<img width="742" height="940" alt="warpweb-sessions" src="https://github.com/user-attachments/assets/7bc6a64e-6dbc-421a-9297-7c2a7b4fb017" />
+<img width="737" height="930" alt="warpweb-session" src="https://github.com/user-attachments/assets/74ae1176-6207-42b7-a927-97fae690aa3a" />
+
