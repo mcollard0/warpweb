@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app import main
 from app import local_jobs
+from app import __version__
 from app.auth import SessionStore, make_password_hash, verify_password
 from app.history import conversation_turns, pieces, turn_window
 from app.warp_api import card
@@ -34,6 +35,10 @@ def login( browser ):
     result = browser.post( "/api/login", json={ "password": "example-only-password" }, headers=ORIGIN );
     assert result.status_code == 200;
     return result;
+
+
+def test_application_version():
+    assert __version__ == "0.0.1" and main.app.version == __version__;
 
 
 def test_public_favicon_is_linked_and_served( client ):

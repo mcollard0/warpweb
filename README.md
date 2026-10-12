@@ -1,6 +1,7 @@
 <img width="747" height="936" alt="warpweb-login" src="https://github.com/user-attachments/assets/d9920986-ef7f-45cb-bfb4-072354e09c04" />
 
 # Warp mobile client
+Version **0.0.1**, defined in `app/__init__.py` and used by the FastAPI application metadata.
 A password-gated, mobile-friendly web client for browsing Warp agent runs, reading conversation cards, and creating or continuing local Oz CLI sessions.
 
 FastAPI fetches history and metadata through Warp REST using a server-only API key. Local tasks run through the Warp CLI with private prompt files; desktop runs remain read-only.
@@ -22,7 +23,7 @@ See [architecture.md](architecture.md) for API details and limitations. For deve
 
 The October 12 UX changes are deployed: the approved service restart completed on October 12, 2026, at approximately 13:32 UTC, with no active warpweb CLI jobs detected beforehand. Public assets/session health, authentication protection on the new endpoints, HTTPS redirect, and security headers passed smoke checks. Log in again after refreshing the page; authenticated live interaction still requires your password. Compatibility fallbacks remain available for future rolling asset/backend updates.
 The subsequent next-turn recovery, concurrent-session navigation, directory-recovery, and model-selection changes are deployed after the approved October 12, 2026 restart, with **135 tests** passing, including **31 mobile browser scenarios**. No active agent processes or private task files were present before restart. The service is active/running with zero automatic restarts; loopback/public asset/session checks, updated controls, protected model/job/next-turn/cancel routes, Origin protection, and security headers passed smoke checks. Refresh and log in again; restarting cleared browser logins and the in-memory job registry. No commits or pushes were made for these changes.
-The follow-up workspace-name typo fix and collapsed next-turn settings pass **142 tests**, including **34 mobile browser scenarios**. Frontend assets are available on refresh; the directory backend change awaits a separately approved service restart.
+Version **0.0.1**, including the workspace-name typo fix and collapsed next-turn settings, was activated by the approved October 12, 2026 restart and verified at 16:18 UTC. **143 tests** pass, including **34 mobile browser scenarios**. No active agent processes or private task files were present before restart; the service is active/running with zero automatic restarts. Local/public smoke checks passed for assets/session health, protected routes, Origin rejection, HTTPS redirect, and security headers. Refresh and log in again.
 
 <img width="757" height="937" alt="warpweb-new-session" src="https://github.com/user-attachments/assets/c8337cc0-da9c-4494-a75a-4a455fb9864a" />
 <img width="742" height="940" alt="warpweb-sessions" src="https://github.com/user-attachments/assets/7bc6a64e-6dbc-421a-9297-7c2a7b4fb017" />

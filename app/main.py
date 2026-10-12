@@ -16,6 +16,7 @@ from app.history import conversation_turns, turn_window
 from app.rendering import render_markdown
 from app import local_jobs
 from app import models
+from app import __version__
 from app.warp_api import card, get_json
 
 
@@ -23,7 +24,7 @@ STATIC = Path( __file__ ).parent / "static";
 COOKIE = "warpweb_session";
 RUN_ID = re.compile( r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$" );
 ORIGINS = { origin.strip() for origin in os.getenv( "WARPWEB_ALLOWED_ORIGINS", "http://127.0.0.1:8797" ).split( "," ) };
-app = FastAPI( docs_url=None, redoc_url=None, openapi_url=None );
+app = FastAPI( version=__version__, docs_url=None, redoc_url=None, openapi_url=None );
 app.mount( "/assets", StaticFiles( directory=STATIC ), name="assets" );
 sessions = SessionStore();
 
