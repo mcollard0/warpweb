@@ -40,10 +40,10 @@ function updatePreferencesUI() {
     }
 }
 
-function rememberWorkdir( directory ) {
+function rememberWorkdir( directory, updateInputs = true ) {
     if ( !directory ) return;
     recentDirectories = [ directory, ...recentDirectories.filter( value => value !== directory ) ].slice( 0, preferences.mru );
-    for ( const id of [ "new-cwd", "session-cwd" ] ) document.getElementById( id ).value = directory;
+    if ( updateInputs ) for ( const id of [ "new-cwd", "session-cwd" ] ) document.getElementById( id ).value = directory;
     savePreferences();
     updatePreferencesUI();
 }

@@ -1,6 +1,7 @@
 """API contract tests without network calls or a real account password."""
 
 import os
+from xml.etree import ElementTree
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,6 +34,19 @@ def login( browser ):
     result = browser.post( "/api/login", json={ "password": "example-only-password" }, headers=ORIGIN );
     assert result.status_code == 200;
     return result;
+
+
+def test_public_favicon_is_linked_and_served( client ):
+    page = client.get( "/" );
+    assert page.status_code == 200;
+    assert '<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" sizes="any">' in page.text;
+    icon = client.get( "/assets/favicon.svg" );
+    assert icon.status_code == 200;
+    assert icon.headers["content-type"].split( ";", 1 )[0] == "image/svg+xml";
+    assert icon.headers["cache-control"] == "no-store";
+    svg = ElementTree.fromstring( icon.content );
+    assert svg.tag == "{http://www.w3.org/2000/svg}svg" and svg.attrib["viewBox"] == "0 0 32 32";
+    assert client.get( "/api/session" ).json() == { "authenticated": False };
 
 
 def test_password_hash_and_invalid_format( monkeypatch ):
@@ -351,3 +365,107 @@ def test_configurable_public_redirect_and_fail_closed( client, monkeypatch ):
     assert result.status_code == 503 and "user:pass" not in result.text;
     monkeypatch.delenv( "WARPWEB_PUBLIC_URL", raising=False );
     assert client.get( "/api/session" ).status_code == 503;
+
+
+def test_cancellation_is_authenticated_origin_protected_and_scoped( client, monkeypatch ):
+    observed = [];
+    job = local_jobs.Job( id="owned-job", state="stopping" );
+    monkeypatch.setattr( local_jobs, "jobs", { job.id: job } );
+    def fake_cancel( job_id ):
+        observed.append( job_id );
+        return job;
+    monkeypatch.setattr( local_jobs, "cancel", fake_cancel );
+    assert client.get( "/api/jobs" ).status_code == 401;
+    assert client.post( "/api/jobs/owned-job/cancel", headers=ORIGIN ).status_code == 401;
+    login( client );
+    assert client.post( "/api/jobs/owned-job/cancel" ).status_code == 403;
+    assert client.post( "/api/jobs/owned-job/cancel", headers={ "Origin": "https://evil.test" } ).status_code == 403;
+    assert not observed;
+    response = client.post( "/api/jobs/owned-job/cancel", headers=ORIGIN );
+    assert response.status_code == 202 and response.json()["state"] == "stopping";
+    assert observed == [ "owned-job" ];
+    payload = client.get( "/api/jobs" ).json()["jobs"][0];
+    assert payload["can_cancel"] is False;
+    assert not { "process", "pid", "stop_task", "cancel_event" }.intersection( payload );
+
+
+def test_active_job_discovery_and_metadata_restore_only_owned_local_jobs( client, monkeypatch ):
+    job = local_jobs.Job( id="owned", run_id=RUN_ID, conversation_id=RUN_ID, verified=True, process=object() );
+    completed = local_jobs.Job( id="finished", state="completed" );
+    monkeypatch.setattr( local_jobs, "jobs", { job.id: job, completed.id: completed } );
+    detail = { "run_id": RUN_ID, "conversation_id": RUN_ID, "source": "CLI", "execution_location": "LOCAL", "state": "INPROGRESS" };
+    async def fake_warp( path, params=None ): return detail if not path.endswith( "/conversation" ) else { "steps": [] };
+    monkeypatch.setattr( main, "get_json", fake_warp );
+    login( client );
+    assert [ item["id"] for item in client.get( "/api/jobs" ).json()["jobs"] ] == [ "owned" ];
+    for suffix in ( "", "/metadata" ):
+        payload = client.get( f"/api/runs/{RUN_ID}{suffix}" ).json();
+        assert payload["local_job"]["id"] == "owned" and payload["local_job"]["can_cancel"];
+    detail["source"] = "LOCAL";
+    assert client.get( f"/api/runs/{RUN_ID}/metadata" ).json()["local_job"] is None;
+    detail.update( { "source": "CLI", "execution_location": "REMOTE" } );
+    assert client.get( f"/api/runs/{RUN_ID}/metadata" ).json()["local_job"] is None;
+    monkeypatch.setattr( local_jobs, "jobs", {} );
+    assert client.post( "/api/jobs/unknown/cancel", headers=ORIGIN ).status_code == 404;
+
+
+def test_stopped_owned_job_can_continue_despite_stale_upstream_status( client, monkeypatch ):
+    job = local_jobs.Job( id="stopped", run_id=RUN_ID, conversation_id=RUN_ID, verified=True, state="cancelled", cwd="/workspace" );
+    monkeypatch.setattr( local_jobs, "jobs", { job.id: job } );
+    async def fake_warp( *args ): return { "run_id": RUN_ID, "conversation_id": RUN_ID, "source": "CLI", "execution_location": "LOCAL", "state": "INPROGRESS" };
+    monkeypatch.setattr( main, "get_json", fake_warp );
+    observed = [];
+    def start( *args, **kwargs ):
+        observed.append( ( args, kwargs ) );
+        return local_jobs.Job( id="next" );
+    monkeypatch.setattr( local_jobs, "start", start );
+    assert client.post( "/api/jobs/stopped/messages", json={ "prompt": "Next" }, headers=ORIGIN ).status_code == 401;
+    login( client );
+    assert client.post( "/api/jobs/stopped/messages", json={ "prompt": "Next" } ).status_code == 403;
+    assert client.get( f"/api/runs/{RUN_ID}/metadata" ).json()["can_send"];
+    assert client.post( "/api/jobs/stopped/messages", json={ "prompt": "Next" }, headers=ORIGIN ).status_code == 200;
+    assert observed[-1][0] == ( "Next", "/workspace", RUN_ID );
+    assert client.post( f"/api/runs/{RUN_ID}/messages", json={ "prompt": "Next" }, headers=ORIGIN ).status_code == 200;
+    job.process = object();
+    assert not job.public()["can_resume"];
+    assert client.post( "/api/jobs/stopped/messages", json={ "prompt": "Next" }, headers=ORIGIN ).status_code == 409;
+    assert not client.get( f"/api/runs/{RUN_ID}/metadata" ).json()["can_send"];
+    job.process = None; job.verified = False;
+    assert client.post( "/api/jobs/stopped/messages", json={ "prompt": "Next" }, headers=ORIGIN ).status_code == 409;
+    assert client.post( "/api/jobs/unknown/messages", json={ "prompt": "Next" }, headers=ORIGIN ).status_code == 404;
+
+
+def test_owned_conversation_lock_applies_to_older_runs( client, monkeypatch ):
+    next_id = "11111111-1111-4111-8111-111111111111";
+    job = local_jobs.Job( id="next-turn", run_id=next_id, conversation_id=RUN_ID, verified=True, process=object() );
+    monkeypatch.setattr( local_jobs, "jobs", { job.id: job } );
+    async def fake_warp( *args ): return { "run_id": RUN_ID, "conversation_id": RUN_ID, "source": "CLI", "execution_location": "LOCAL", "state": "SUCCEEDED" };
+    monkeypatch.setattr( main, "get_json", fake_warp );
+    login( client );
+    data = client.get( f"/api/runs/{RUN_ID}/metadata" ).json();
+    assert not data["can_send"] and data["local_job"]["id"] == job.id;
+    assert client.post( f"/api/runs/{RUN_ID}/messages", json={ "prompt": "Duplicate" }, headers=ORIGIN ).status_code == 409;
+    job.state = "stopping";
+    assert not job.public()["can_resume"];
+
+
+def test_model_catalog_and_per_turn_validation( client, monkeypatch ):
+    async def catalog(): return [ "auto", "fixture-model" ];
+    monkeypatch.setattr( main.models, "catalog", catalog );
+    called = [];
+    def start( *args, **kwargs ):
+        called.append( kwargs );
+        return local_jobs.Job( id="selected", model=kwargs.get( "model" ) );
+    monkeypatch.setattr( local_jobs, "start", start );
+    assert client.get( "/api/models" ).status_code == 401;
+    login( client );
+    assert client.get( "/api/models" ).json() == { "models": [ "auto", "fixture-model" ], "available": True };
+    assert client.post( "/api/jobs", json={ "prompt": "Test", "model": "fixture-model" }, headers=ORIGIN ).json()["model"] == "fixture-model";
+    assert called[-1] == { "model": "fixture-model" };
+    for value in [ "--bad-flag", "unknown", "a\nb" ]:
+        assert client.post( "/api/jobs", json={ "prompt": "Test", "model": value }, headers=ORIGIN ).status_code == 400;
+    async def unavailable(): raise __import__( "fastapi" ).HTTPException( 503, "unavailable" );
+    monkeypatch.setattr( main.models, "catalog", unavailable );
+    assert client.get( "/api/models" ).json() == { "models": [], "available": False };
+    assert client.post( "/api/jobs", json={ "prompt": "Default", "model": None }, headers=ORIGIN ).status_code == 200;
+    assert client.post( "/api/jobs", json={ "prompt": "Test", "model": "auto" }, headers=ORIGIN ).status_code == 503;

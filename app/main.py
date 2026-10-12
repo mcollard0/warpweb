@@ -15,7 +15,8 @@ from app.config import validate_origin
 from app.history import conversation_turns, turn_window
 from app.rendering import render_markdown
 from app import local_jobs
-from app.warp_api import capabilities, card, get_json
+from app import models
+from app.warp_api import card, get_json
 
 
 STATIC = Path( __file__ ).parent / "static";
@@ -33,6 +34,7 @@ class LoginRequest( BaseModel ):
 class TaskRequest( BaseModel ):
     prompt: str = Field( min_length=1, max_length=4096 );
     cwd: str | None = Field( default=None, max_length=1024 );
+    model: str | None = Field( default=None, max_length=128 );
 
 class RenderRequest( BaseModel ):
     text: str = Field( max_length=65536 );
@@ -115,12 +117,30 @@ async def runs( scope: Literal["local", "cloud", "all"] = "local", cursor: str |
     return { "runs": [ card( item ) for item in result.get( "runs", [] ) ], "next_cursor": ( result.get( "page_info" ) or {} ).get( "next_cursor" ) };
 
 
+def local_capabilities( detail: dict ) -> dict:
+    result = card( detail );
+    local = detail.get( "source" ) == "CLI" and detail.get( "execution_location" ) == "LOCAL";
+    job = local_jobs.for_run( result["id"], detail.get( "conversation_id" ) ) if local else None;
+    result["local_job"] = job;
+    if job:
+        result["can_send"] = job["can_resume"] or result["can_send"] and job["state"] not in local_jobs.ACTIVE_STATES;
+    return result;
+
+
+@app.get( "/api/models", dependencies=[Depends( require_auth )] )
+async def available_models() -> dict:
+    try:
+        return { "models": await models.catalog(), "available": True };
+    except HTTPException:
+        return { "models": [], "available": False };
+
+
 @app.get( "/api/runs/{run_id}", dependencies=[Depends( require_auth )] )
 async def run_preview( run_id: str ) -> dict:
     if not RUN_ID.fullmatch( run_id ):
         raise HTTPException( 400, "Invalid run ID" );
     detail = await get_json( f"/runs/{run_id}" );
-    preview = card( detail );
+    preview = local_capabilities( detail );
     preview["conversation_available"] = False;
     preview["root_steps"] = 0;
     if detail.get( "conversation_id" ):
@@ -138,7 +158,9 @@ async def run_preview( run_id: str ) -> dict:
 async def run_metadata( run_id: str ) -> dict:
     if not RUN_ID.fullmatch( run_id ):
         raise HTTPException( 400, "Invalid run ID" );
-    return card( await get_json( f"/runs/{run_id}" ) );
+    detail = await get_json( f"/runs/{run_id}" );
+    result = local_capabilities( detail );
+    return result;
 
 
 @app.post( "/api/render", dependencies=[Depends( require_auth )] )
@@ -160,10 +182,35 @@ async def run_history( run_id: str, size: int = Query( default=8192, ge=4096, le
         raise HTTPException( 409, str( error ) ) from error;
 
 
+@app.get( "/api/jobs", dependencies=[Depends( require_auth )] )
+async def active_jobs() -> dict:
+    return { "jobs": [ job.public() for job in local_jobs.jobs.values() if job.state in local_jobs.ACTIVE_STATES ] };
+
+
+@app.post( "/api/jobs/{job_id}/cancel", status_code=202, dependencies=[Depends( require_auth )] )
+async def cancel_job( job_id: str, request: Request ) -> dict:
+    check_origin( request );
+    return local_jobs.cancel( job_id ).public();
+
+
 @app.post( "/api/jobs", dependencies=[Depends( require_auth )] )
 async def create_job( request: Request, task: TaskRequest ) -> dict:
     check_origin( request );
-    return local_jobs.start( task.prompt, task.cwd ).public();
+    model = await models.validate( task.model );
+    return ( local_jobs.start( task.prompt, task.cwd, model=model ) if model else local_jobs.start( task.prompt, task.cwd ) ).public();
+
+
+@app.post( "/api/jobs/{job_id}/messages", dependencies=[Depends( require_auth )] )
+async def continue_job( job_id: str, request: Request, task: TaskRequest ) -> dict:
+    check_origin( request );
+    job = local_jobs.jobs.get( job_id );
+    if not job:
+        raise HTTPException( 404, "Local job not found; reopen a verified run or start a new session" );
+    if not local_jobs.resumable( job ):
+        raise HTTPException( 409, "Wait for cleanup and verified conversation identity before continuing" );
+    model = await models.validate( task.model );
+    cwd = task.cwd or job.requested_cwd or job.cwd;
+    return ( local_jobs.start( task.prompt, cwd, job.conversation_id, model=model ) if model else local_jobs.start( task.prompt, cwd, job.conversation_id ) ).public();
 
 
 @app.post( "/api/runs/{run_id}/messages", dependencies=[Depends( require_auth )] )
@@ -172,9 +219,10 @@ async def continue_run( run_id: str, request: Request, task: TaskRequest ) -> di
     if not RUN_ID.fullmatch( run_id ):
         raise HTTPException( 400, "Invalid run ID" );
     detail = await get_json( f"/runs/{run_id}" );
-    if not capabilities( detail )["can_send"]:
+    if not local_capabilities( detail )["can_send"]:
         raise HTTPException( 409, "Only finished local CLI conversations can be continued; active or blocked runs must finish first" );
-    return local_jobs.start( task.prompt, task.cwd, detail["conversation_id"] ).public();
+    model = await models.validate( task.model );
+    return ( local_jobs.start( task.prompt, task.cwd, detail["conversation_id"], model=model ) if model else local_jobs.start( task.prompt, task.cwd, detail["conversation_id"] ) ).public();
 
 
 @app.get( "/api/jobs/{job_id}", dependencies=[Depends( require_auth )] )
