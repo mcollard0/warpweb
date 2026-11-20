@@ -1,5 +1,7 @@
 <img width="747" height="936" alt="warpweb-login" src="https://github.com/user-attachments/assets/d9920986-ef7f-45cb-bfb4-072354e09c04" />
 
+NOTICE: This project is parked for now. I had issues with the system. Will revisit it at a later time to see if it's corrected upstream. 
+
 # Warp mobile client
 Version **0.0.1**, defined in `app/__init__.py` and used by the FastAPI application metadata.
 A password-gated, mobile-friendly web client for browsing Warp agent runs, reading conversation cards, and creating or continuing local Oz CLI sessions.
